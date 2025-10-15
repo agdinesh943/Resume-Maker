@@ -18,7 +18,7 @@ const baseUrl = isAzure
 app.use(cors({
     origin: [
         'https://au-resume-maker.netlify.app',  // Your actual frontend URL
-        'https://resume-backend-07-dkawbthjh0b5hdeb.centralindia-01'    // Your actual backend URL
+        'https://resume-backend-07-dkawbthjh0b5hdeb.centralindia-01.azurewebsites.net'    // Your actual backend URL
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -103,7 +103,7 @@ app.post('/generate-pdf', async (req, res) => {
         // Current: 
         // processedHtml = processedHtml.replace(/src="\.\/images\//g, 'src="http://localhost:3000/images/');
         // Change to your production domain:
-        processedHtml = processedHtml.replace(/src="\.\/images\//g, 'src="https://resume-backend-07.centralindia-01.azurewebsites.net/images/');
+        processedHtml = processedHtml.replace(/src="\.\/images\//g, 'src="https://resume-backend-07.azurewebsites.net/images/');
 
         // Replace the placeholder with actual resume content
         templateHtml = templateHtml.replace('<!-- Resume content will be injected here -->', processedHtml);
@@ -214,5 +214,6 @@ app.listen(PORT, () => {
     console.log(`Resume form: http://localhost:${PORT}/resume-form`);
     console.log(`Resume preview: http://localhost:${PORT}/preview`);
 });
+
 
 
