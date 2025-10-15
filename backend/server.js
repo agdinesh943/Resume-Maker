@@ -60,19 +60,14 @@ app.post('/generate-pdf', async (req, res) => {
             return res.status(400).json({ error: 'HTML content is required' });
         }
 
-        // Launch Puppeteer with high DPI settings
+        // Launch Puppeteer with Azure-compatible settings
         browser = await puppeteer.launch({
-            headless: 'new',
+            headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
                 '--disable-gpu',
-                '--font-render-hinting=none',
-                '--disable-font-subpixel-positioning'
+                '--disable-dev-shm-usage'
             ]
         });
 
@@ -214,6 +209,3 @@ app.listen(PORT, () => {
     console.log(`Resume form: http://localhost:${PORT}/resume-form`);
     console.log(`Resume preview: http://localhost:${PORT}/preview`);
 });
-
-
-
