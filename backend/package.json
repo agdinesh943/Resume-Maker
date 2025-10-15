@@ -10,7 +10,10 @@
     "azure": "node server.js",
     "postinstall": "npx puppeteer browsers install chrome"
   },
-  
+  "puppeteer": {
+    "skip_chromium_download": false
+  },
+
   "engines": {
     "node": "20.x"
   },
@@ -34,4 +37,3 @@
   "author": "Resume Maker",
   "license": "MIT"
 }
-
