@@ -61,5 +61,6 @@ jobs:
         with:
           app-name: 'resume-backend-07'
           slot-name: 'Production'
-          package: .
+          package: ./backend
+
           
