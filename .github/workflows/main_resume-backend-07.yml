@@ -3,7 +3,6 @@ name: Deploy to Azure
 on:
   push:
     branches: [ main ]
-    paths: [ 'backend/**' ]
 
 jobs:
   deploy:
@@ -17,9 +16,8 @@ jobs:
         node-version: '20'
         
     - name: Install dependencies
-      run: |
-        cd backend
-        npm install
+      working-directory: ./backend
+      run: npm install
         
     - name: Deploy to Azure
       uses: azure/webapps-deploy@v2
