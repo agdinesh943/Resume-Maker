@@ -55,20 +55,23 @@ app.post('/generate-pdf', async (req, res) => {
     let browser;
     try {
         const { html, username = 'Resume' } = req.body;
-
         if (!html) {
             return res.status(400).json({ error: 'HTML content is required' });
         }
-
-        // Launch Puppeteer with Azure-compatible settings
+        const executablePath = "/usr/bin/chromium-browser";
+        // Launch Puppeteer pointing to system chrome
         browser = await puppeteer.launch({
             headless: true,
+            executablePath,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-gpu',
-                '--disable-dev-shm-usage'
-            ]
+                '--disable-dev-shm-usage',
+                '--single-process',
+                '--no-zygote'
+            ],
+            defaultViewport: { width: 1200, height: 800 }
         });
 
         const page = await browser.newPage();
