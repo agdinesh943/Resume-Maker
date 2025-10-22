@@ -118,6 +118,9 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 // Serve static files from parent directory
 app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
+// Serve frontend assets with /frontend prefix
+app.use('/frontend', express.static(path.join(__dirname, '..', 'frontend')));
+
 app.post('/generate-pdf', async (req, res) => {
     // Add CORS headers manually as backup
     res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
@@ -183,11 +186,46 @@ app.post('/generate-pdf', async (req, res) => {
 
         // Read the template and inject the HTML content
         const templatePath = path.join(__dirname, 'templates', 'resume.html');
-        let templateHtml = fs.readFileSync(templatePath, 'utf8');
+        let templateHtml;
+
+        // Check if template exists, if not create a basic one
+        try {
+            templateHtml = fs.readFileSync(templatePath, 'utf8');
+        } catch (error) {
+            console.error('Template file not found, using fallback template');
+            templateHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume - {{username}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        .resume-container { max-width: 800px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <div class="resume-container" id="resume-content">
+        <!-- Resume content will be injected here -->
+    </div>
+</body>
+</html>`;
+        }
 
         // Read the CSS file and inject it directly
         const cssPath = path.join(__dirname, '..', 'frontend', 'index.css');
-        const cssContent = fs.readFileSync(cssPath, 'utf8');
+        let cssContent;
+
+        try {
+            cssContent = fs.readFileSync(cssPath, 'utf8');
+        } catch (error) {
+            console.error('CSS file not found, using minimal CSS');
+            cssContent = `
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+                .resume-container { max-width: 800px; margin: 0 auto; }
+                * { box-sizing: border-box; }
+            `;
+        }
 
         // Inject CSS content before the existing style tag
         templateHtml = templateHtml.replace('<!-- CSS will be injected by server -->', `<style>${cssContent}</style>`);
@@ -197,7 +235,8 @@ app.post('/generate-pdf', async (req, res) => {
 
         // Use production URL if not on localhost, otherwise use localhost
         const baseUrl = isProduction
-            ? 'https://resume-backend-exg9b4e8cafbdven.canadacentral-01.azurewebsites.net'
+            // ? 'https://resume-backend-exg9b4e8cafbdven.canadacentral-01.azurewebsites.net'
+            ? 'https://resume-maker-3-tf2e.onrender.com'
             : 'http://localhost:3000';
 
         processedHtml = processedHtml.replace(/src="\.\/images\//g, `src="${baseUrl}/images/`);
