@@ -1,5 +1,5 @@
-# Use Playwright's official image with browsers pre-installed
-FROM mcr.microsoft.com/playwright:v1.56.1-focal
+# Use Node.js 20 base image
+FROM node:20-bookworm
 
 # Set working directory
 WORKDIR /app
@@ -9,6 +9,9 @@ COPY package*.json ./
 
 # Install dependencies
 RUN npm ci --only=production
+
+# Install Playwright and browsers
+RUN npx playwright install chromium
 
 # Copy application code
 COPY . .
