@@ -8,7 +8,7 @@ const crypto = require('crypto');
 
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 
 
@@ -131,194 +131,107 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'frontend')));
 
 app.post('/generate-pdf', async (req, res) => {
-    // Add CORS headers manually as backup
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-
-    console.log('PDF generation request received from origin:', req.headers.origin);
-    console.log('Request headers:', req.headers);
-    console.log('Current working directory:', process.cwd());
-    console.log('__dirname:', __dirname);
-    console.log('NODE_ENV:', process.env.NODE_ENV);
+    const puppeteer = require('puppeteer');
+    const path = require('path');
+    const fs = require('fs');
 
     let browser;
+
     try {
         const { html, username = 'Resume' } = req.body;
 
-        if (!html) {
-            return res.status(400).json({ error: 'HTML content is required' });
-        }
+        if (!html) return res.status(400).json({ error: 'HTML content is required' });
 
-        // Launch Puppeteer with high DPI settings
-        const isProduction = process.env.NODE_ENV === 'production' || process.env.PORT;
-        const puppeteerArgs = [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu',
-            '--font-render-hinting=none',
-            '--disable-font-subpixel-positioning'
-        ];
-
-        // Add production-specific args
-        if (isProduction) {
-            puppeteerArgs.push('--disable-web-security');
-            puppeteerArgs.push('--disable-features=VizDisplayCompositor');
-        }
-
+        // Launch Puppeteer
+        const isProduction = process.env.NODE_ENV === 'production';
         browser = await puppeteer.launch({
             headless: 'new',
-            args: puppeteerArgs
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu'
+            ]
         });
 
         const page = await browser.newPage();
 
-        // Set viewport for exact A4 dimensions - no gaps
-        await page.setViewport({
-            width: 794, // A4 width in pixels at 96 DPI (210mm)
-            height: 1123, // A4 height in pixels at 96 DPI (297mm)
-            deviceScaleFactor: 1, // Use 1x to match exact A4 size
-            isMobile: false,
-            hasTouch: false
-        });
-
-        // Read the template and inject the HTML content
+        // Inject template
         const templatePath = path.join(__dirname, 'templates', 'resume.html');
-
-        // Check if template file exists
         if (!fs.existsSync(templatePath)) {
-            console.error('Template file not found:', templatePath);
             return res.status(500).json({ error: 'Template file not found' });
         }
-
         let templateHtml = fs.readFileSync(templatePath, 'utf8');
 
-        // Read the CSS file and inject it directly
+        // Inject CSS inline
         const cssPath = path.join(__dirname, 'frontend', 'index.css');
-
-        // Check if CSS file exists
         if (!fs.existsSync(cssPath)) {
-            console.error('CSS file not found:', cssPath);
             return res.status(500).json({ error: 'CSS file not found' });
         }
-
         const cssContent = fs.readFileSync(cssPath, 'utf8');
-
-        // Inject CSS content before the existing style tag
         templateHtml = templateHtml.replace('<!-- CSS will be injected by server -->', `<style>${cssContent}</style>`);
 
-        // Fix image paths to use absolute URLs for proper loading
-        let processedHtml = html;
-
-        // Use production URL if not on localhost, otherwise use localhost
+        // Replace relative image paths with absolute URLs
         const baseUrl = isProduction
             ? 'https://resume-maker-3-4n85.onrender.com'
-            : 'http://localhost:3000';
+            : 'http://localhost:3001';
+        let processedHtml = html.replace(/src="\.\/images\//g, `src="${baseUrl}/images/`);
 
-        processedHtml = processedHtml.replace(/src="\.\/images\//g, `src="${baseUrl}/images/`);
-
-        // Replace the placeholder with actual resume content
+        // Inject resume content into template
         templateHtml = templateHtml.replace('<!-- Resume content will be injected here -->', processedHtml);
 
-        // Debug: Log the HTML length to ensure content is being injected
-        console.log('HTML content length:', html.length);
-        console.log('Processed HTML length:', processedHtml.length);
-        console.log('Template HTML length:', templateHtml.length);
+        // Set page content and wait until all resources load
+        await page.setContent(templateHtml, { waitUntil: 'networkidle0', timeout: 30000 });
 
-        // Set content with faster wait strategy for cloud deployment
-        await page.setContent(templateHtml, {
-            waitUntil: 'domcontentloaded',
-            timeout: 15000
-        });
-
-        // Wait for images with shorter timeout for cloud deployment
+        // Wait for fonts/images (optional safety)
         try {
-            await page.evaluate(() => {
-                return Promise.all(
+            await page.evaluate(() =>
+                Promise.all(
                     Array.from(document.images).map(img => {
                         if (img.complete) return Promise.resolve();
-                        return new Promise((resolve) => {
+                        return new Promise(resolve => {
                             img.onload = resolve;
-                            img.onerror = () => resolve(); // Continue even if images fail
-                            // Shorter timeout for cloud deployment
-                            setTimeout(() => resolve(), 3000);
+                            img.onerror = resolve;
+                            setTimeout(resolve, 3000);
                         });
                     })
-                );
-            });
-        } catch (error) {
-            console.warn('Image loading warning:', error.message);
-            // Continue even if image loading fails
+                )
+            );
+        } catch (err) {
+            console.warn('Image load warning:', err.message);
         }
 
-        // Wait for fonts to load with timeout
-        try {
-            await Promise.race([
-                page.evaluateHandle('document.fonts.ready'),
-                new Promise((resolve) => setTimeout(resolve, 2000))
-            ]);
-        } catch (error) {
-            console.warn('Font loading warning:', error.message);
-        }
+        // Generate PDF (use either format or width/height, not both)
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' }
+        });
 
-        // Generate PDF with exact A4 dimensions - no gaps
-        console.log('Starting PDF generation...');
-        let pdfBuffer;
-        try {
-            pdfBuffer = await page.pdf({
-                format: 'A4',
-                printBackground: true,
-                margin: {
-                    top: '0mm',
-                    right: '0mm',
-                    bottom: '0mm',
-                    left: '0mm'
-                },
-                preferCSSPageSize: true,
-                displayHeaderFooter: false,
-                scale: 1,
-                width: '210mm',
-                height: '297mm'
-            });
-            console.log('PDF generated successfully, buffer size:', pdfBuffer.length);
-        } catch (pdfError) {
-            console.error('PDF generation failed:', pdfError);
-            throw new Error(`PDF generation failed: ${pdfError.message}`);
-        }
-
-        // Validate PDF buffer
         if (!pdfBuffer || pdfBuffer.length === 0) {
             throw new Error('Generated PDF buffer is empty or invalid');
         }
 
-        // Set response headers
+        // Send PDF response
         const filename = `resume_${username.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.setHeader('Content-Length', pdfBuffer.length);
+        res.end(pdfBuffer); // ✅ Use end instead of send
 
-        console.log('Sending PDF response...');
-        // Send PDF
-        res.send(pdfBuffer);
-        console.log('PDF response sent successfully');
+        console.log('PDF generated and sent successfully');
 
     } catch (error) {
         console.error('PDF generation error:', error);
-        console.error('Error stack:', error.stack);
         res.status(500).json({
             error: 'Failed to generate PDF',
-            details: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            details: error.message
         });
     } finally {
-        if (browser) {
-            await browser.close();
-        }
+        if (browser) await browser.close();
     }
 });
 
