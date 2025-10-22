@@ -203,7 +203,7 @@ app.post('/generate-pdf', async (req, res) => {
 
         // Use production URL if not on localhost, otherwise use localhost
         const baseUrl = isProduction
-            ? 'https://resume-maker-3-fdbj.onrender.com'
+            ? 'https://resume-maker-3-4n85.onrender.com'
             : 'http://localhost:3000';
 
         processedHtml = processedHtml.replace(/src="\.\/images\//g, `src="${baseUrl}/images/`);
@@ -374,3 +374,4 @@ app.listen(PORT, () => {
     console.log(`Resume form: http://localhost:${PORT}/resume-form`);
     console.log(`Resume preview: http://localhost:${PORT}/preview`);
 });
+
