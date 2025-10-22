@@ -125,6 +125,9 @@ app.post('/generate-pdf', async (req, res) => {
 
     console.log('PDF generation request received from origin:', req.headers.origin);
     console.log('Request headers:', req.headers);
+    console.log('Current working directory:', process.cwd());
+    console.log('__dirname:', __dirname);
+    console.log('NODE_ENV:', process.env.NODE_ENV);
 
     let browser;
     try {
@@ -172,10 +175,24 @@ app.post('/generate-pdf', async (req, res) => {
 
         // Read the template and inject the HTML content
         const templatePath = path.join(__dirname, 'templates', 'resume.html');
+
+        // Check if template file exists
+        if (!fs.existsSync(templatePath)) {
+            console.error('Template file not found:', templatePath);
+            return res.status(500).json({ error: 'Template file not found' });
+        }
+
         let templateHtml = fs.readFileSync(templatePath, 'utf8');
 
         // Read the CSS file and inject it directly
         const cssPath = path.join(__dirname, '..', 'frontend', 'index.css');
+
+        // Check if CSS file exists
+        if (!fs.existsSync(cssPath)) {
+            console.error('CSS file not found:', cssPath);
+            return res.status(500).json({ error: 'CSS file not found' });
+        }
+
         const cssContent = fs.readFileSync(cssPath, 'utf8');
 
         // Inject CSS content before the existing style tag
@@ -252,9 +269,11 @@ app.post('/generate-pdf', async (req, res) => {
 
     } catch (error) {
         console.error('PDF generation error:', error);
+        console.error('Error stack:', error.stack);
         res.status(500).json({
             error: 'Failed to generate PDF',
-            details: error.message
+            details: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     } finally {
         if (browser) {
@@ -271,26 +290,67 @@ app.get('/health', (req, res) => {
 
 // Serve the main landing page at /landing
 app.get('/landing-page', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+    res.sendFile(path.resolve(__dirname, '..', 'frontend', 'index.html'));
 });
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+    res.sendFile(path.resolve(__dirname, '..', 'frontend', 'index.html'));
 });
 
 
 // Resume form endpoint
 app.get('/resume-form', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'frontend', 'resume-form.html'));
+    res.sendFile(path.resolve(__dirname, '..', 'frontend', 'resume-form.html'));
 });
 
 // Resume preview endpoint
 app.get('/preview', (req, res) => {
-    res.sendFile(path.join(__dirname, '..', 'frontend', 'preview.html'));
+    res.sendFile(path.resolve(__dirname, '..', 'frontend', 'preview.html'));
 });
 
 app.get('/api/test', (req, res) => {
     res.json({ status: "Backend is live!" });
+});
+
+// Debug endpoint to check file structure
+app.get('/api/debug', (req, res) => {
+    const fs = require('fs');
+    const path = require('path');
+
+    const debugInfo = {
+        cwd: process.cwd(),
+        __dirname: __dirname,
+        nodeEnv: process.env.NODE_ENV,
+        files: {
+            template: {
+                path: path.join(__dirname, 'templates', 'resume.html'),
+                exists: fs.existsSync(path.join(__dirname, 'templates', 'resume.html'))
+            },
+            css: {
+                path: path.join(__dirname, '..', 'frontend', 'index.css'),
+                exists: fs.existsSync(path.join(__dirname, '..', 'frontend', 'index.css'))
+            },
+            frontendDir: {
+                path: path.join(__dirname, '..', 'frontend'),
+                exists: fs.existsSync(path.join(__dirname, '..', 'frontend'))
+            }
+        }
+    };
+
+    // Try to list directory contents
+    try {
+        debugInfo.frontendContents = fs.readdirSync(path.join(__dirname, '..', 'frontend'));
+    } catch (e) {
+        debugInfo.frontendContents = `Error: ${e.message}`;
+    }
+
+    try {
+        debugInfo.templatesContents = fs.readdirSync(path.join(__dirname, 'templates'));
+    } catch (e) {
+        debugInfo.templatesContents = `Error: ${e.message}`;
+    }
+
+    res.json(debugInfo);
 });
 
 
