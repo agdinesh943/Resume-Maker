@@ -1,10 +1,9 @@
-FROM node:18-slim
+FROM node:20-slim
 
-# Install dependencies for Chromium
+# Install Chromium dependencies
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-liberation \
-    libappindicator3-1 \
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -19,8 +18,7 @@ RUN apt-get update && apt-get install -y \
     libpangocairo-1.0-0 \
     libgtk-3-0 \
     wget \
-    --no-install-recommends \
-  && rm -rf /var/lib/apt/lists/*
+    --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package*.json ./
