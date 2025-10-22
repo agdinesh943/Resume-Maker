@@ -1,31 +1,32 @@
-# Use Node.js 20 base image
-FROM node:20-bookworm
+# ✅ Use official Playwright image (already has Chromium + deps)
+FROM mcr.microsoft.com/playwright:v1.50.0-noble
 
 # Set working directory
 WORKDIR /app
 
 # Copy package files
-COPY backend/package*.json ./
+COPY package*.json ./
 
 # Install dependencies
 RUN npm ci --only=production
 
-# Install Playwright and browsers
+# Copy app source
+COPY . .
+
+# ✅ Add missing Linux dependencies for Chromium (for safety)
+RUN npx playwright install-deps
+
+# Optional: ensure Chromium is ready
 RUN npx playwright install chromium
 
-# Copy backend application code
-COPY backend/ ./
-
-# Copy frontend files
-COPY frontend/ ./frontend
-
-# Create non-root user for security
+# Switch to a non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 RUN chown -R appuser:appuser /app
 USER appuser
 
-# Expose port
+# Environment
+ENV PORT=3000
 EXPOSE 3000
 
-# Start the application
+# Start app
 CMD ["npm", "start"]
