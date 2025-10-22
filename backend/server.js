@@ -186,7 +186,7 @@ app.post('/generate-pdf', async (req, res) => {
 
         // Use production URL if not on localhost, otherwise use localhost
         const baseUrl = isProduction
-            ? 'https://resume-backend-exg9b4e8cafbdven.canadacentral-01.azurewebsites.net'
+            ? 'https://resume-maker-3-fdbj.onrender.com'
             : 'http://localhost:3000';
 
         processedHtml = processedHtml.replace(/src="\.\/images\//g, `src="${baseUrl}/images/`);
