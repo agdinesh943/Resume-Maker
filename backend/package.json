@@ -8,7 +8,7 @@
     "dev": "nodemon server.js",
     "prod": "NODE_ENV=production node server.js",
     "azure": "node server.js",
-    "postinstall": "npx playwright install chromium --with-deps"
+    "postinstall": "npx playwright install chromium"
   },
   "engines": {
     "node": "20.x"
