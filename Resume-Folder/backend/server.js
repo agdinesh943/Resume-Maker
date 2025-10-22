@@ -230,30 +230,41 @@ app.post('/generate-pdf', async (req, res) => {
         console.log('Processed HTML length:', processedHtml.length);
         console.log('Template HTML length:', templateHtml.length);
 
-        // Set content with network idle wait for images
+        // Set content with faster wait strategy for cloud deployment
         await page.setContent(templateHtml, {
-            waitUntil: 'networkidle0',
-            timeout: 30000
+            waitUntil: 'domcontentloaded',
+            timeout: 15000
         });
 
-        // Wait for all images to load
-        await page.evaluate(() => {
-            return Promise.all(
-                Array.from(document.images).map(img => {
-                    if (img.complete) return Promise.resolve();
-                    return new Promise((resolve, reject) => {
-                        img.onload = resolve;
-                        img.onerror = (error) => {
-                            console.error('Image failed to load:', img.src, error);
-                            resolve(); // Continue even if some images fail
-                        };
-                    });
-                })
-            );
-        });
+        // Wait for images with shorter timeout for cloud deployment
+        try {
+            await page.evaluate(() => {
+                return Promise.all(
+                    Array.from(document.images).map(img => {
+                        if (img.complete) return Promise.resolve();
+                        return new Promise((resolve) => {
+                            img.onload = resolve;
+                            img.onerror = () => resolve(); // Continue even if images fail
+                            // Shorter timeout for cloud deployment
+                            setTimeout(() => resolve(), 3000);
+                        });
+                    })
+                );
+            });
+        } catch (error) {
+            console.warn('Image loading warning:', error.message);
+            // Continue even if image loading fails
+        }
 
-        // Wait for fonts to load
-        await page.evaluateHandle('document.fonts.ready');
+        // Wait for fonts to load with timeout
+        try {
+            await Promise.race([
+                page.evaluateHandle('document.fonts.ready'),
+                new Promise((resolve) => setTimeout(resolve, 2000))
+            ]);
+        } catch (error) {
+            console.warn('Font loading warning:', error.message);
+        }
 
         // Generate PDF with exact A4 dimensions - no gaps
         const pdfBuffer = await page.pdf({
