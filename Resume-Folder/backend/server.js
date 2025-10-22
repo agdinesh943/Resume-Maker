@@ -267,21 +267,34 @@ app.post('/generate-pdf', async (req, res) => {
         }
 
         // Generate PDF with exact A4 dimensions - no gaps
-        const pdfBuffer = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: {
-                top: '0mm',
-                right: '0mm',
-                bottom: '0mm',
-                left: '0mm'
-            },
-            preferCSSPageSize: true,
-            displayHeaderFooter: false,
-            scale: 1,
-            width: '210mm',
-            height: '297mm'
-        });
+        console.log('Starting PDF generation...');
+        let pdfBuffer;
+        try {
+            pdfBuffer = await page.pdf({
+                format: 'A4',
+                printBackground: true,
+                margin: {
+                    top: '0mm',
+                    right: '0mm',
+                    bottom: '0mm',
+                    left: '0mm'
+                },
+                preferCSSPageSize: true,
+                displayHeaderFooter: false,
+                scale: 1,
+                width: '210mm',
+                height: '297mm'
+            });
+            console.log('PDF generated successfully, buffer size:', pdfBuffer.length);
+        } catch (pdfError) {
+            console.error('PDF generation failed:', pdfError);
+            throw new Error(`PDF generation failed: ${pdfError.message}`);
+        }
+
+        // Validate PDF buffer
+        if (!pdfBuffer || pdfBuffer.length === 0) {
+            throw new Error('Generated PDF buffer is empty or invalid');
+        }
 
         // Set response headers
         const filename = `resume_${username.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
@@ -289,8 +302,10 @@ app.post('/generate-pdf', async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.setHeader('Content-Length', pdfBuffer.length);
 
+        console.log('Sending PDF response...');
         // Send PDF
         res.send(pdfBuffer);
+        console.log('PDF response sent successfully');
 
     } catch (error) {
         console.error('PDF generation error:', error);
