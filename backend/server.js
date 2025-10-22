@@ -147,17 +147,31 @@ app.post('/generate-pdf', async (req, res) => {
                 '--no-zygote',
                 '--disable-gpu',
                 '--font-render-hinting=none',
-                '--disable-font-subpixel-positioning'
+                '--disable-font-subpixel-positioning',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
             ]
         };
 
-        // Add production-specific args
+        // Add production-specific args for Render
         if (isProduction) {
             launchOptions.args.push('--disable-web-security');
             launchOptions.args.push('--disable-features=VizDisplayCompositor');
+            launchOptions.args.push('--single-process');
+            launchOptions.args.push('--no-zygote');
         }
 
-        browser = await chromium.launch(launchOptions);
+        try {
+            browser = await chromium.launch(launchOptions);
+        } catch (error) {
+            console.error('Failed to launch browser with standard options, trying fallback...');
+            // Fallback with minimal options for Render
+            browser = await chromium.launch({
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+            });
+        }
 
         const page = await browser.newPage();
 
