@@ -318,7 +318,7 @@
                     // Use production URL if not on localhost, otherwise use localhost
                     const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
                     const apiUrl = isProduction
-                        ? 'https://resume-maker-3-fdbj.onrender.com/generate-pdf'
+                        ? 'https://resume-maker-3-4n85.onrender.com/generate-pdf'
                         : 'http://localhost:3000/generate-pdf';
 
                     const response = await fetch(apiUrl, {
@@ -363,5 +363,6 @@
         // }
     </script>
 </body>
+
 
 </html>
