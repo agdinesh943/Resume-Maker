@@ -99,10 +99,22 @@ const PORT = process.env.PORT || 3000;
 //     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 //     optionsSuccessStatus: 200
 // }));
+// app.use(cors({
+//     origin: true, // Allow all origins temporarily
+//     credentials: true
+// }));
 app.use(cors({
-    origin: true, // Allow all origins temporarily
-    credentials: true
+    origin: [
+        'https://au-resume-maker.netlify.app',
+        'https://au-resume-maker.netlify.app/',
+        'http://localhost:3000',
+        'http://localhost:3001'
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
 
 // Additional CORS handling for preflight requests
 app.options('*', (req, res) => {
@@ -122,6 +134,8 @@ app.post('/generate-pdf', async (req, res) => {
     // Add CORS headers manually as backup
     res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
     res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
     console.log('PDF generation request received from origin:', req.headers.origin);
     console.log('Request headers:', req.headers);
@@ -374,4 +388,3 @@ app.listen(PORT, () => {
     console.log(`Resume form: http://localhost:${PORT}/resume-form`);
     console.log(`Resume preview: http://localhost:${PORT}/preview`);
 });
-
