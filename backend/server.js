@@ -312,11 +312,6 @@ app.post('/generate-pdf', async (req, res) => {
 
         const pdfBuffer = await Promise.race([pdfGenerationPromise, timeoutPromise]);
 
-        // Set response headers
-        const filename = `resume_${username.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.setHeader('Content-Length', pdfBuffer.length);
 
         // Send PDF
         res.send(pdfBuffer);
@@ -372,3 +367,4 @@ app.listen(PORT, () => {
     console.log(`Resume form: http://localhost:${PORT}/resume-form`);
     console.log(`Resume preview: http://localhost:${PORT}/preview`);
 });
+
