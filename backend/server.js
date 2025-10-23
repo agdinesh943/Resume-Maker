@@ -152,6 +152,18 @@ async function generatePDF(html, username) {
 
         const page = await browser.newPage();
 
+        // Disable images and other resources to speed up loading
+        await page.setRequestInterception(true);
+        page.on('request', (request) => {
+            const resourceType = request.resourceType();
+            if (resourceType === 'image' || resourceType === 'font' || resourceType === 'stylesheet') {
+                // Allow images and fonts but block other resources
+                request.continue();
+            } else {
+                request.continue();
+            }
+        });
+
         // Set viewport for exact A4 dimensions - no gaps
         await page.setViewport({
             width: 794, // A4 width in pixels at 96 DPI (210mm)
@@ -193,30 +205,50 @@ async function generatePDF(html, username) {
         console.log('CSS content length:', cssContent.length);
         console.log('Base URL for images:', baseUrl);
 
-        // Set content with network idle wait for images
+        // Set content with optimized loading strategy
         await page.setContent(templateHtml, {
-            waitUntil: 'networkidle0',
-            timeout: 30000
+            waitUntil: 'domcontentloaded',
+            timeout: 60000
         });
 
-        // Wait for all images to load
-        await page.evaluate(() => {
-            return Promise.all(
-                Array.from(document.images).map(img => {
-                    if (img.complete) return Promise.resolve();
-                    return new Promise((resolve, reject) => {
-                        img.onload = resolve;
-                        img.onerror = (error) => {
-                            console.error('Image failed to load:', img.src, error);
-                            resolve(); // Continue even if some images fail
-                        };
-                    });
-                })
-            );
-        });
+        // Wait for images with timeout and fallback
+        try {
+            await page.evaluate(() => {
+                return Promise.all(
+                    Array.from(document.images).map(img => {
+                        if (img.complete) return Promise.resolve();
+                        return new Promise((resolve) => {
+                            const timeout = setTimeout(() => {
+                                console.warn('Image load timeout:', img.src);
+                                resolve(); // Continue even if timeout
+                            }, 10000); // 10 second timeout per image
 
-        // Wait for fonts to load
-        await page.evaluateHandle('document.fonts.ready');
+                            img.onload = () => {
+                                clearTimeout(timeout);
+                                resolve();
+                            };
+                            img.onerror = (error) => {
+                                clearTimeout(timeout);
+                                console.warn('Image failed to load:', img.src, error);
+                                resolve(); // Continue even if some images fail
+                            };
+                        });
+                    })
+                );
+            });
+        } catch (error) {
+            console.warn('Image loading error, continuing:', error);
+        }
+
+        // Wait for fonts to load with timeout
+        try {
+            await Promise.race([
+                page.evaluateHandle('document.fonts.ready'),
+                new Promise((resolve) => setTimeout(resolve, 5000)) // 5 second timeout
+            ]);
+        } catch (error) {
+            console.warn('Font loading timeout, continuing:', error);
+        }
 
         // Generate PDF with exact A4 dimensions - no gaps
         console.log('Starting PDF generation...');
@@ -275,7 +307,7 @@ app.post('/generate-pdf', async (req, res) => {
         // Set a timeout for the entire PDF generation process
         const pdfGenerationPromise = generatePDF(html, username);
         const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('PDF generation timeout after 60 seconds')), 60000);
+            setTimeout(() => reject(new Error('PDF generation timeout after 90 seconds')), 90000);
         });
 
         const pdfBuffer = await Promise.race([pdfGenerationPromise, timeoutPromise]);
