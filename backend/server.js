@@ -1,376 +1,375 @@
-const express = require('express');
-const puppeteer = require('puppeteer');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
+<!DOCTYPE html>
+<html lang="en">
 
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-
-
-
-// Email configuration (you'll need to set up your SMTP credentials)
-// For testing purposes, we'll use a mock transporter
-
-
-// const isTestingMode = process.env.NODE_ENV === 'development' || process.env.TESTING === 'true';
-
-// let transporter;
-// if (isTestingMode) {
-//     // Mock transporter for testing
-//     transporter = {
-//         sendMail: async (mailOptions) => {
-//             console.log('TESTING MODE: Email would be sent to:', mailOptions.to);
-//             console.log('TESTING MODE: Subject:', mailOptions.subject);
-//             console.log('TESTING MODE: Magic link:', mailOptions.html.match(/href="([^"]+)"/)?.[1] || 'No link found');
-//             return { messageId: 'test-message-id' };
-//         }
-//     };
-// } else {
-//     transporter = nodemailer.createTransport({
-//         service: 'gmail', // or your preferred email service
-//         auth: {
-//             user: process.env.EMAIL_USER || 'your-email@gmail.com',
-//             pass: process.env.EMAIL_PASS || 'your-app-password'
-//         }
-//     });
-// }
-
-// Email validation function
-// function validateEmail(email) {
-//     const emailRegex = /^[^\s@]+@ced\.alliance\.edu\.in$/;
-//     return emailRegex.test(email);
-// }
-
-// Generate magic link token
-// function generateMagicLinkToken() {
-//     return crypto.randomBytes(32).toString('hex');
-// }
-
-// Send magic link email
-// async function sendMagicLinkEmail(email, token) {
-//     const magicLink = `http://localhost:${PORT}/login?token=${token}&email=${encodeURIComponent(email)}`;
-
-//     const mailOptions = {
-//         from: process.env.EMAIL_USER || 'your-email@gmail.com',
-//         to: email,
-//         subject: 'Access Your Resume Maker - Magic Link',
-//         html: `
-//             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-//                 <h2 style="color: #008cff;">Alliance University Resume Maker</h2>
-//                 <p>Hello!</p>
-//                 <p>You requested access to the Alliance University Resume Maker. Click the button below to access the platform:</p>
-//                 <div style="text-align: center; margin: 30px 0;">
-//                     <a href="${magicLink}" style="background-color: #008cff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block;">Access Resume Maker</a>
-//                 </div>
-//                 <p>Or copy and paste this link into your browser:</p>
-//                 <p style="word-break: break-all; color: #666;">${magicLink}</p>
-//                 <p><strong>Note:</strong> This link will expire in 15 minutes for security reasons.</p>
-//                 <p>If you didn't request this access, please ignore this email.</p>
-//                 <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-//                 <p style="color: #666; font-size: 12px;">This is an automated message from Alliance University Resume Maker.</p>
-//             </div>
-//         `
-//     };
-
-//     try {
-//         await transporter.sendMail(mailOptions);
-//         return true;
-//     } catch (error) {
-//         console.error('Error sending email:', error);
-//         return false;
-//     }
-// }
-
-// Middleware
-// app.use(cors({
-//     origin: [
-//         'https://au-resume-maker.netlify.app',
-//         'http://localhost:3000',
-//         'http://localhost:5500',
-//         'http://127.0.0.1:5500'
-//     ],
-//     credentials: true,
-//     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-//     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-//     optionsSuccessStatus: 200
-// }));
-app.use(cors({
-    origin: true, // Allow all origins temporarily
-    credentials: true
-}));
-
-// Additional CORS handling for preflight requests
-app.options('*', (req, res) => {
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.sendStatus(200);
-});
-app.use(bodyParser.json({ limit: '10mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
-
-// Serve static files from frontend directory
-app.use(express.static(path.join(__dirname, 'frontend')));
-
-app.post('/generate-pdf', async (req, res) => {
-    // Add CORS headers manually as backup
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Credentials', 'true');
-
-    console.log('PDF generation request received from origin:', req.headers.origin);
-    console.log('Request headers:', req.headers);
-    console.log('Current working directory:', process.cwd());
-    console.log('__dirname:', __dirname);
-    console.log('NODE_ENV:', process.env.NODE_ENV);
-
-    let browser;
-    try {
-        const { html, username = 'Resume' } = req.body;
-
-        if (!html) {
-            return res.status(400).json({ error: 'HTML content is required' });
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Preview</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="./favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="./favicon/favicon-16x16.png">
+    <link rel="manifest" href="./favicon/site.webmanifest">
+    <link rel="stylesheet" href="index.css">
+    <style>
+        /* High-quality PDF rendering - match backend template exactly */
+        * {
+            -webkit-print-color-adjust: exact !important;
+            color-adjust: exact !important;
+            print-color-adjust: exact !important;
         }
 
-        // Launch Puppeteer with high DPI settings
-        const isProduction = process.env.NODE_ENV === 'production' || process.env.PORT;
-        const puppeteerArgs = [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu',
-            '--font-render-hinting=none',
-            '--disable-font-subpixel-positioning'
-        ];
-
-        // Add production-specific args
-        if (isProduction) {
-            puppeteerArgs.push('--disable-web-security');
-            puppeteerArgs.push('--disable-features=VizDisplayCompositor');
+        /* Ensure crisp rendering */
+        img {
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
         }
 
-        browser = await puppeteer.launch({
-            headless: 'new',
-            args: puppeteerArgs
-        });
-
-        const page = await browser.newPage();
-
-        // Set viewport for exact A4 dimensions - no gaps
-        await page.setViewport({
-            width: 794, // A4 width in pixels at 96 DPI (210mm)
-            height: 1123, // A4 height in pixels at 96 DPI (297mm)
-            deviceScaleFactor: 1, // Use 1x to match exact A4 size
-            isMobile: false,
-            hasTouch: false
-        });
-
-        // Read the template and inject the HTML content
-        const templatePath = path.join(__dirname, 'templates', 'resume.html');
-
-        // Check if template file exists
-        if (!fs.existsSync(templatePath)) {
-            console.error('Template file not found:', templatePath);
-            return res.status(500).json({ error: 'Template file not found' });
+        /* A4 specific adjustments - fill entire page with no gaps */
+        .resume-container {
+            width: 210mm !important;
+            min-height: 297mm !important;
+            margin: 0 auto !important;
+            padding: 0 6mm !important;
+            background: white !important;
+            box-shadow: none !important;
+            position: relative !important;
+            overflow: visible !important;
+            box-sizing: border-box !important;
+            max-width: 90vw !important;
         }
 
-        let templateHtml = fs.readFileSync(templatePath, 'utf8');
-
-        // Read the CSS file and inject it directly
-        const cssPath = path.join(__dirname, 'frontend', 'index.css');
-
-        // Check if CSS file exists
-        if (!fs.existsSync(cssPath)) {
-            console.error('CSS file not found:', cssPath);
-            return res.status(500).json({ error: 'CSS file not found' });
+        /* Ensure body centers the content properly */
+        body {
+            font-family: 'Times New Roman', Times, serif !important;
+            background-color: #f5f5f5 !important;
+            padding: 20px !important;
+            margin: 0 !important;
+            width: 100% !important;
+            min-height: 100vh !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: center !important;
+            box-sizing: border-box !important;
+            text-align: left !important;
         }
 
-        const cssContent = fs.readFileSync(cssPath, 'utf8');
-
-        // Inject CSS content before the existing style tag
-        templateHtml = templateHtml.replace('<!-- CSS will be injected by server -->', `<style>${cssContent}</style>`);
-
-        // Fix image paths to use absolute URLs for proper loading
-        let processedHtml = html;
-
-        // Use production URL if not on localhost, otherwise use localhost
-        const baseUrl = isProduction
-            ? 'https://resume-maker-3-fdbj.onrender.com'
-            : 'http://localhost:3000';
-
-        processedHtml = processedHtml.replace(/src="\.\/images\//g, `src="${baseUrl}/images/`);
-
-        // Replace the placeholder with actual resume content
-        templateHtml = templateHtml.replace('<!-- Resume content will be injected here -->', processedHtml);
-
-        // Debug: Log the HTML length to ensure content is being injected
-        console.log('HTML content length:', html.length);
-        console.log('Processed HTML length:', processedHtml.length);
-        console.log('Template HTML length:', templateHtml.length);
-
-        // Set content with network idle wait for images
-        await page.setContent(templateHtml, {
-            waitUntil: 'networkidle0',
-            timeout: 30000
-        });
-
-        // Wait for all images to load
-        await page.evaluate(() => {
-            return Promise.all(
-                Array.from(document.images).map(img => {
-                    if (img.complete) return Promise.resolve();
-                    return new Promise((resolve, reject) => {
-                        img.onload = resolve;
-                        img.onerror = (error) => {
-                            console.error('Image failed to load:', img.src, error);
-                            resolve(); // Continue even if some images fail
-                        };
-                    });
-                })
-            );
-        });
-
-        // Wait for fonts to load
-        await page.evaluateHandle('document.fonts.ready');
-
-        // Generate PDF with exact A4 dimensions - no gaps
-        const pdfBuffer = await page.pdf({
-            format: 'A4',
-            printBackground: true,
-            margin: {
-                top: '0mm',
-                right: '0mm',
-                bottom: '0mm',
-                left: '0mm'
-            },
-            preferCSSPageSize: true,
-            displayHeaderFooter: false,
-            scale: 1,
-            width: '210mm',
-            height: '297mm'
-        });
-
-        // Set response headers
-        const filename = `resume_${username.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.setHeader('Content-Length', pdfBuffer.length);
-
-        // Send PDF
-        res.send(pdfBuffer);
-
-    } catch (error) {
-        console.error('PDF generation error:', error);
-        console.error('Error stack:', error.stack);
-        res.status(500).json({
-            error: 'Failed to generate PDF',
-            details: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
-    } finally {
-        if (browser) {
-            await browser.close();
+        /* Ensure html provides proper centering */
+        html {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            box-sizing: border-box !important;
         }
-    }
-});
+
+        /* Position footer at bottom of page with small gap */
+        .footer {
+            position: absolute !important;
+            bottom: 2mm !important;
+            left: 6mm !important;
+            right: 6mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            z-index: 10 !important;
+        }
+
+        .footer .footer-bold {
+            font-weight: 900 !important;
+        }
+
+        /* Position top logos at top of page with small gap */
+        .header-container {
+            margin-top: 0mm !important;
+            padding-top: 0 !important;
+            position: relative !important;
+            z-index: 10 !important;
+        }
+
+        /* Logo styling for PDF */
+        .logo-au {
+            width: 700px !important;
+            height: 100px !important;
+            object-fit: contain !important;
+        }
+
+        .logo-container {
+            height: 80px !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 15px !important;
+        }
+
+        .hackerrank-logo,
+        .leetcode-logo {
+            width: 120px !important;
+            height: 60px !important;
+            object-fit: contain !important;
+            vertical-align: middle !important;
+            margin-bottom: 20px !important;
+        }
+
+        /* Ensure main content doesn't overlap with footer */
+        .main-content {
+            margin-bottom: 15mm !important;
+            padding-bottom: 0 !important;
+        }
+
+        /* Ensure body fills entire page */
+        body {
+            font-family: 'Times New Roman', Times, serif !important;
+            background-color: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            min-height: 297mm !important;
+            margin: 0 auto !important;
+        }
+
+        /* Ensure html fills entire page */
+        html {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            height: 297mm !important;
+        }
+
+        /* Ensure images load properly */
+        img {
+            max-width: 100% !important;
+            height: auto !important;
+        }
+
+        /* Download button container */
+        .download-container {
+            margin-bottom: 20px !important;
+            text-align: center !important;
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+
+        .download-btn {
+            background: #007bff !important;
+            color: white !important;
+            border: none !important;
+            padding: 12px 24px !important;
+            border-radius: 6px !important;
+            font-size: 16px !important;
+            cursor: pointer !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+            transition: background-color 0.3s !important;
+        }
+
+        .download-btn:hover {
+            background: #0056b3 !important;
+        }
+
+        .download-btn:disabled {
+            background: #6c757d !important;
+            cursor: not-allowed !important;
+        }
+
+        /* Resume wrapper for centering */
+        .resume-wrapper {
+            width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            flex: 1 !important;
+        }
+
+        /* Resume container with border - override previous styles */
+        .resume-container {
+            border: 2px solid #ddd !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+            background: white !important;
+            width: 210mm !important;
+            max-width: 90vw !important;
+            margin: 0 auto !important;
+            display: block !important;
+            position: relative !important;
+            text-align: left !important;
+        }
+
+        /* Ensure all text elements are left-aligned */
+        .resume-container * {
+            text-align: justify !important;
+        }
+
+        .student-name {
+            text-align: center !important;
+        }
+
+        /* Center only the footer text */
+        .resume-container .footer {
+            text-align: center !important;
+        }
+
+        .resume-container .footer * {
+            text-align: center !important;
+        }
+
+        /* Back button styling */
+        .back-button {
+            position: fixed !important;
+            top: 20px !important;
+            left: 20px !important;
+            z-index: 1000 !important;
+            background: #007bff !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 50% !important;
+            width: 50px !important;
+            height: 50px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            cursor: pointer !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+            transition: all 0.3s ease !important;
+            font-size: 20px !important;
+        }
+
+        .back-button:hover {
+            background: #0056b3 !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3) !important;
+        }
+
+        .back-button:active {
+            transform: translateY(0) !important;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+</head>
+
+<body>
+    <!-- Back button -->
+    <!-- <button id="backBtn" class="back-button" title="Back to Form">
+        <ion-icon name="arrow-back"></ion-icon>
+    </button> -->
+
+    <div class="download-container">
+        <button id="downloadBtn" class="download-btn"><ion-icon name="document-text"></ion-icon> Download PDF</button>
+    </div>
+    <div class="resume-wrapper" id="resumeWrapper">
+        <!-- Resume content will be loaded here -->
+    </div>
+    <script>
+        // Load resume data from sessionStorage
+        let resumeData = null;
+        let formData = null;
+        let uploadedImages = null;
+        let selectedLogos = null;
+        let resumeHTML = null;
+
+        // Load data when page loads
+        window.addEventListener('DOMContentLoaded', function () {
+            try {
+                const storedData = sessionStorage.getItem('resumeData');
+                if (!storedData) {
+                    alert('No resume data found. Please fill out the form first.');
+                    window.location.href = '/resume-form';
+                    return;
+                }
+
+                resumeData = JSON.parse(storedData);
+                formData = resumeData.formData;
+                uploadedImages = resumeData.uploadedImages;
+                selectedLogos = resumeData.selectedLogos;
+                resumeHTML = resumeData.resumeHTML;
+
+                // Update page title
+                document.title = `Resume - ${formData.studentName}`;
+
+                // Load resume HTML
+                document.getElementById('resumeWrapper').innerHTML = resumeHTML;
+
+                // Setup download button
+                setupDownloadButton();
+
+                // Setup back button
+                // setupBackButton();
 
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
-// Serve the main landing page at /landing
-app.get('/landing-page', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'frontend', 'index.html'));
-});
-
-app.get('/', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'frontend', 'index.html'));
-});
-
-
-// Resume form endpoint
-app.get('/resume-form', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'frontend', 'resume-form.html'));
-});
-
-// Resume preview endpoint
-app.get('/preview', (req, res) => {
-    res.sendFile(path.resolve(__dirname, 'frontend', 'preview.html'));
-});
-
-app.get('/api/test', (req, res) => {
-    res.json({ status: "Backend is live!" });
-});
-
-// Debug endpoint to check file structure
-app.get('/api/debug', (req, res) => {
-    const fs = require('fs');
-    const path = require('path');
-
-    const debugInfo = {
-        cwd: process.cwd(),
-        __dirname: __dirname,
-        nodeEnv: process.env.NODE_ENV,
-        files: {
-            template: {
-                path: path.join(__dirname, 'templates', 'resume.html'),
-                exists: fs.existsSync(path.join(__dirname, 'templates', 'resume.html'))
-            },
-            css: {
-                path: path.join(__dirname, 'frontend', 'index.css'),
-                exists: fs.existsSync(path.join(__dirname, 'frontend', 'index.css'))
-            },
-            frontendDir: {
-                path: path.join(__dirname, 'frontend'),
-                exists: fs.existsSync(path.join(__dirname, 'frontend'))
+            } catch (error) {
+                console.error('Error loading resume data:', error);
+                alert('Error loading resume data. Please try again.');
+                window.location.href = '/resume-form';
             }
+        });
+
+        function setupDownloadButton() {
+            document.getElementById('downloadBtn').addEventListener('click', async function () {
+                const element = document.getElementById('resume-content');
+                const username = formData.studentName.replace(/\s+/g, '_');
+
+                try {
+                    // Show loading state
+                    this.textContent = 'Generating PDF...';
+                    this.disabled = true;
+
+                    // Send to backend for high-quality PDF generation
+                    // Use production URL if not on localhost, otherwise use localhost
+                    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+                    const apiUrl = isProduction
+                        ? 'https://resume-maker-3-4n85.onrender.com/generate-pdf'
+                        : 'http://localhost:3000/generate-pdf';
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            html: element.innerHTML,
+                            username: username
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('PDF generation failed');
+                    }
+
+                    const blob = await response.blob();
+                    console.log('PDF blob size:', blob.size);
+                    console.log('PDF blob type:', blob.type);
+
+                    // Check if blob is valid
+                    if (blob.size === 0) {
+                        throw new Error('PDF blob is empty');
+                    }
+
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${username}_Resume.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                } catch (error) {
+                    console.error('PDF generation error:', error);
+                    alert('PDF generation failed. Please try again or use the browser print function.');
+                } finally {
+                    // Reset button state
+                    this.textContent = 'Download PDF';
+                    this.disabled = false;
+                }
+            });
         }
-    };
 
-    // Try to list directory contents
-    try {
-        debugInfo.frontendContents = fs.readdirSync(path.join(__dirname, 'frontend'));
-    } catch (e) {
-        debugInfo.frontendContents = `Error: ${e.message}`;
-    }
+        // function setupBackButton() {
+        //     document.getElementById('backBtn').addEventListener('click', function () {
+        //         // Navigate back to the resume form
+        //         window.location.href = '/resume-form';
+        //     });
+        // }
+    </script>
+</body>
 
-    try {
-        debugInfo.templatesContents = fs.readdirSync(path.join(__dirname, 'templates'));
-    } catch (e) {
-        debugInfo.templatesContents = `Error: ${e.message}`;
-    }
-
-    res.json(debugInfo);
-});
-
-// Catch-all handler: send back index.html for any non-API routes (SPA behavior)
-app.get('*', (req, res) => {
-    // Skip API routes
-    if (req.path.startsWith('/api/') || req.path.startsWith('/generate-pdf')) {
-        return res.status(404).json({ error: 'API endpoint not found' });
-    }
-
-    // Serve index.html for all other routes
-    res.sendFile(path.resolve(__dirname, 'frontend', 'index.html'));
-});
-
-
-app.listen(PORT, () => {
-    console.log(`PDF generation server running on port ${PORT}`);
-    console.log(`Health check: http://localhost:${PORT}/health`);
-    console.log(`Root (redirects to login): http://localhost:${PORT}/`);
-    // console.log(`Student login: http://localhost:${PORT}/login`);
-    console.log(`Landing page: http://localhost:${PORT}/landing`);
-    console.log(`Resume form: http://localhost:${PORT}/resume-form`);
-    console.log(`Resume preview: http://localhost:${PORT}/preview`);
-});
+</html>
