@@ -11,6 +11,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 
+
+
+// Email configuration (you'll need to set up your SMTP credentials)
 // For testing purposes, we'll use a mock transporter
 
 
@@ -115,10 +118,24 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 // Serve static files from frontend directory
 app.use(express.static(path.join(__dirname, 'frontend')));
 
-// PDF generation function
-async function generatePDF(html, username) {
+app.post('/generate-pdf', async (req, res) => {
+    // Add CORS headers manually as backup
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
+
+    console.log('PDF generation request received from origin:', req.headers.origin);
+    console.log('Request headers:', req.headers);
+    console.log('Current working directory:', process.cwd());
+    console.log('__dirname:', __dirname);
+    console.log('NODE_ENV:', process.env.NODE_ENV);
+
     let browser;
     try {
+        const { html, username = 'Resume' } = req.body;
+
+        if (!html) {
+            return res.status(400).json({ error: 'HTML content is required' });
+        }
 
         // Launch Puppeteer with high DPI settings
         const isProduction = process.env.NODE_ENV === 'production' || process.env.PORT;
@@ -131,18 +148,13 @@ async function generatePDF(html, username) {
             '--no-zygote',
             '--disable-gpu',
             '--font-render-hinting=none',
-            '--disable-font-subpixel-positioning',
-            '--memory-pressure-off',
-            '--max_old_space_size=4096'
+            '--disable-font-subpixel-positioning'
         ];
 
         // Add production-specific args
         if (isProduction) {
             puppeteerArgs.push('--disable-web-security');
             puppeteerArgs.push('--disable-features=VizDisplayCompositor');
-            puppeteerArgs.push('--disable-background-timer-throttling');
-            puppeteerArgs.push('--disable-backgrounding-occluded-windows');
-            puppeteerArgs.push('--disable-renderer-backgrounding');
         }
 
         browser = await puppeteer.launch({
@@ -151,18 +163,6 @@ async function generatePDF(html, username) {
         });
 
         const page = await browser.newPage();
-
-        // Disable images and other resources to speed up loading
-        await page.setRequestInterception(true);
-        page.on('request', (request) => {
-            const resourceType = request.resourceType();
-            if (resourceType === 'image' || resourceType === 'font' || resourceType === 'stylesheet') {
-                // Allow images and fonts but block other resources
-                request.continue();
-            } else {
-                request.continue();
-            }
-        });
 
         // Set viewport for exact A4 dimensions - no gaps
         await page.setViewport({
@@ -175,22 +175,35 @@ async function generatePDF(html, username) {
 
         // Read the template and inject the HTML content
         const templatePath = path.join(__dirname, 'templates', 'resume.html');
+
+        // Check if template file exists
+        if (!fs.existsSync(templatePath)) {
+            console.error('Template file not found:', templatePath);
+            return res.status(500).json({ error: 'Template file not found' });
+        }
+
         let templateHtml = fs.readFileSync(templatePath, 'utf8');
 
         // Read the CSS file and inject it directly
         const cssPath = path.join(__dirname, 'frontend', 'index.css');
+
+        // Check if CSS file exists
+        if (!fs.existsSync(cssPath)) {
+            console.error('CSS file not found:', cssPath);
+            return res.status(500).json({ error: 'CSS file not found' });
+        }
+
         const cssContent = fs.readFileSync(cssPath, 'utf8');
 
-        // Inject CSS content at the end of body to ensure it overrides template styles
-        templateHtml = templateHtml.replace('<!-- CSS will be injected by server -->', '');
-        templateHtml = templateHtml.replace('</body>', `<style>${cssContent}</style></body>`);
+        // Inject CSS content before the existing style tag
+        templateHtml = templateHtml.replace('<!-- CSS will be injected by server -->', `<style>${cssContent}</style>`);
 
         // Fix image paths to use absolute URLs for proper loading
         let processedHtml = html;
 
         // Use production URL if not on localhost, otherwise use localhost
         const baseUrl = isProduction
-            ? 'https://resume-maker-3-4n85.onrender.com'
+            ? 'https://resume-maker-3-fdbj.onrender.com'
             : 'http://localhost:3000';
 
         processedHtml = processedHtml.replace(/src="\.\/images\//g, `src="${baseUrl}/images/`);
@@ -202,56 +215,33 @@ async function generatePDF(html, username) {
         console.log('HTML content length:', html.length);
         console.log('Processed HTML length:', processedHtml.length);
         console.log('Template HTML length:', templateHtml.length);
-        console.log('CSS content length:', cssContent.length);
-        console.log('Base URL for images:', baseUrl);
 
-        // Set content with optimized loading strategy
+        // Set content with network idle wait for images
         await page.setContent(templateHtml, {
-            waitUntil: 'domcontentloaded',
-            timeout: 60000
+            waitUntil: 'networkidle0',
+            timeout: 30000
         });
 
-        // Wait for images with timeout and fallback
-        try {
-            await page.evaluate(() => {
-                return Promise.all(
-                    Array.from(document.images).map(img => {
-                        if (img.complete) return Promise.resolve();
-                        return new Promise((resolve) => {
-                            const timeout = setTimeout(() => {
-                                console.warn('Image load timeout:', img.src);
-                                resolve(); // Continue even if timeout
-                            }, 10000); // 10 second timeout per image
+        // Wait for all images to load
+        await page.evaluate(() => {
+            return Promise.all(
+                Array.from(document.images).map(img => {
+                    if (img.complete) return Promise.resolve();
+                    return new Promise((resolve, reject) => {
+                        img.onload = resolve;
+                        img.onerror = (error) => {
+                            console.error('Image failed to load:', img.src, error);
+                            resolve(); // Continue even if some images fail
+                        };
+                    });
+                })
+            );
+        });
 
-                            img.onload = () => {
-                                clearTimeout(timeout);
-                                resolve();
-                            };
-                            img.onerror = (error) => {
-                                clearTimeout(timeout);
-                                console.warn('Image failed to load:', img.src, error);
-                                resolve(); // Continue even if some images fail
-                            };
-                        });
-                    })
-                );
-            });
-        } catch (error) {
-            console.warn('Image loading error, continuing:', error);
-        }
-
-        // Wait for fonts to load with timeout
-        try {
-            await Promise.race([
-                page.evaluateHandle('document.fonts.ready'),
-                new Promise((resolve) => setTimeout(resolve, 5000)) // 5 second timeout
-            ]);
-        } catch (error) {
-            console.warn('Font loading timeout, continuing:', error);
-        }
+        // Wait for fonts to load
+        await page.evaluateHandle('document.fonts.ready');
 
         // Generate PDF with exact A4 dimensions - no gaps
-        console.log('Starting PDF generation...');
         const pdfBuffer = await page.pdf({
             format: 'A4',
             printBackground: true,
@@ -267,44 +257,6 @@ async function generatePDF(html, username) {
             width: '210mm',
             height: '297mm'
         });
-        console.log('PDF generated successfully, buffer size:', pdfBuffer.length);
-
-        // Return PDF buffer
-        return pdfBuffer;
-
-    } catch (error) {
-        console.error('PDF generation error:', error);
-        console.error('Error stack:', error.stack);
-        throw error;
-    } finally {
-        if (browser) {
-            await browser.close();
-        }
-    }
-}
-
-app.post('/generate-pdf', async (req, res) => {
-    // Add CORS headers manually as backup
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Credentials', 'true');
-
-    console.log('PDF generation request received from origin:', req.headers.origin);
-    console.log('Request headers:', req.headers);
-
-    try {
-        const { html, username = 'Resume' } = req.body;
-
-        if (!html) {
-            return res.status(400).json({ error: 'HTML content is required' });
-        }
-
-        // Set a timeout for the entire PDF generation process
-        const pdfGenerationPromise = generatePDF(html, username);
-        const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('PDF generation timeout after 90 seconds')), 90000);
-        });
-
-        const pdfBuffer = await Promise.race([pdfGenerationPromise, timeoutPromise]);
 
         // Set response headers
         const filename = `resume_${username.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
@@ -323,6 +275,10 @@ app.post('/generate-pdf', async (req, res) => {
             details: error.message,
             stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
     }
 });
 
@@ -334,26 +290,78 @@ app.get('/health', (req, res) => {
 
 // Serve the main landing page at /landing
 app.get('/landing-page', (req, res) => {
-    res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
+    res.sendFile(path.resolve(__dirname, 'frontend', 'index.html'));
 });
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
+    res.sendFile(path.resolve(__dirname, 'frontend', 'index.html'));
 });
 
 
 // Resume form endpoint
 app.get('/resume-form', (req, res) => {
-    res.sendFile(path.join(__dirname, 'frontend', 'resume-form.html'));
+    res.sendFile(path.resolve(__dirname, 'frontend', 'resume-form.html'));
 });
 
 // Resume preview endpoint
 app.get('/preview', (req, res) => {
-    res.sendFile(path.join(__dirname, 'frontend', 'preview.html'));
+    res.sendFile(path.resolve(__dirname, 'frontend', 'preview.html'));
 });
 
 app.get('/api/test', (req, res) => {
     res.json({ status: "Backend is live!" });
+});
+
+// Debug endpoint to check file structure
+app.get('/api/debug', (req, res) => {
+    const fs = require('fs');
+    const path = require('path');
+
+    const debugInfo = {
+        cwd: process.cwd(),
+        __dirname: __dirname,
+        nodeEnv: process.env.NODE_ENV,
+        files: {
+            template: {
+                path: path.join(__dirname, 'templates', 'resume.html'),
+                exists: fs.existsSync(path.join(__dirname, 'templates', 'resume.html'))
+            },
+            css: {
+                path: path.join(__dirname, 'frontend', 'index.css'),
+                exists: fs.existsSync(path.join(__dirname, 'frontend', 'index.css'))
+            },
+            frontendDir: {
+                path: path.join(__dirname, 'frontend'),
+                exists: fs.existsSync(path.join(__dirname, 'frontend'))
+            }
+        }
+    };
+
+    // Try to list directory contents
+    try {
+        debugInfo.frontendContents = fs.readdirSync(path.join(__dirname, 'frontend'));
+    } catch (e) {
+        debugInfo.frontendContents = `Error: ${e.message}`;
+    }
+
+    try {
+        debugInfo.templatesContents = fs.readdirSync(path.join(__dirname, 'templates'));
+    } catch (e) {
+        debugInfo.templatesContents = `Error: ${e.message}`;
+    }
+
+    res.json(debugInfo);
+});
+
+// Catch-all handler: send back index.html for any non-API routes (SPA behavior)
+app.get('*', (req, res) => {
+    // Skip API routes
+    if (req.path.startsWith('/api/') || req.path.startsWith('/generate-pdf')) {
+        return res.status(404).json({ error: 'API endpoint not found' });
+    }
+
+    // Serve index.html for all other routes
+    res.sendFile(path.resolve(__dirname, 'frontend', 'index.html'));
 });
 
 
@@ -366,5 +374,3 @@ app.listen(PORT, () => {
     console.log(`Resume form: http://localhost:${PORT}/resume-form`);
     console.log(`Resume preview: http://localhost:${PORT}/preview`);
 });
-
-s
