@@ -210,7 +210,25 @@ app.post('/generate-pdf', async (req, res) => {
             return res.status(500).json({ error: 'CSS file not found' });
         }
 
-        const cssContent = fs.readFileSync(cssPath, 'utf8');
+        // Use production URL if not on localhost, otherwise use localhost
+        const baseUrl = isProduction
+            ? 'https://resume-maker-3-4n85.onrender.com'
+            : 'http://localhost:3000';
+
+        let cssContent = fs.readFileSync(cssPath, 'utf8');
+
+        // Fix image paths in CSS content as well
+        console.log('CSS content length before processing:', cssContent.length);
+        const originalCssImages = cssContent.match(/url\(['"]?[^'"]*images[^'"]*['"]?\)/g) || [];
+        console.log('CSS image references found:', originalCssImages.length);
+        console.log('Sample CSS image references:', originalCssImages.slice(0, 3));
+
+        cssContent = cssContent.replace(/url\(['"]?\.\/images\//g, `url('${baseUrl}/images/`);
+        cssContent = cssContent.replace(/url\(['"]?images\//g, `url('${baseUrl}/images/`);
+
+        const processedCssImages = cssContent.match(/url\(['"]?[^'"]*images[^'"]*['"]?\)/g) || [];
+        console.log('Processed CSS image references:', processedCssImages.length);
+        console.log('Sample processed CSS references:', processedCssImages.slice(0, 3));
 
         // Inject CSS content at the end of body to ensure it overrides template styles
         templateHtml = templateHtml.replace('<!-- CSS will be injected by server -->', '');
@@ -218,11 +236,6 @@ app.post('/generate-pdf', async (req, res) => {
 
         // Fix image paths to use absolute URLs for proper loading
         let processedHtml = html;
-
-        // Use production URL if not on localhost, otherwise use localhost
-        const baseUrl = isProduction
-            ? 'https://resume-maker-3-fdbj.onrender.com'
-            : 'http://localhost:3000';
 
         // Fix image paths to use absolute URLs for proper loading
         console.log('Base URL for images:', baseUrl);
@@ -233,6 +246,8 @@ app.post('/generate-pdf', async (req, res) => {
         // Replace various image path patterns
         processedHtml = processedHtml.replace(/src="\.\/images\//g, `src="${baseUrl}/images/`);
         processedHtml = processedHtml.replace(/src="images\//g, `src="${baseUrl}/images/`);
+        processedHtml = processedHtml.replace(/src='\.\/images\//g, `src='${baseUrl}/images/`);
+        processedHtml = processedHtml.replace(/src='images\//g, `src='${baseUrl}/images/`);
 
         const processedImagePaths = processedHtml.match(/src="[^"]*images[^"]*"/g) || [];
         console.log('Processed image paths:', processedImagePaths.length);
@@ -381,7 +396,7 @@ app.get('/api/test', (req, res) => {
     res.json({ status: "Backend is live!" });
 });
 
-// Debug endpoint to check file structure
+// Debug endpoint to check file structure (PRODUCTION: Remove this endpoint)
 app.get('/api/debug', (req, res) => {
     const fs = require('fs');
     const path = require('path');
@@ -390,6 +405,9 @@ app.get('/api/debug', (req, res) => {
         cwd: process.cwd(),
         __dirname: __dirname,
         nodeEnv: process.env.NODE_ENV,
+        baseUrl: process.env.NODE_ENV === 'production'
+            ? 'https://resume-maker-3-4n85.onrender.com'
+            : 'http://localhost:3000',
         files: {
             template: {
                 path: path.join(__dirname, 'templates', 'resume.html'),
@@ -402,6 +420,10 @@ app.get('/api/debug', (req, res) => {
             frontendDir: {
                 path: path.join(__dirname, 'frontend'),
                 exists: fs.existsSync(path.join(__dirname, 'frontend'))
+            },
+            imagesDir: {
+                path: path.join(__dirname, 'frontend', 'images'),
+                exists: fs.existsSync(path.join(__dirname, 'frontend', 'images'))
             }
         }
     };
@@ -417,6 +439,12 @@ app.get('/api/debug', (req, res) => {
         debugInfo.templatesContents = fs.readdirSync(path.join(__dirname, 'templates'));
     } catch (e) {
         debugInfo.templatesContents = `Error: ${e.message}`;
+    }
+
+    try {
+        debugInfo.imagesContents = fs.readdirSync(path.join(__dirname, 'frontend', 'images'));
+    } catch (e) {
+        debugInfo.imagesContents = `Error: ${e.message}`;
     }
 
     res.json(debugInfo);
