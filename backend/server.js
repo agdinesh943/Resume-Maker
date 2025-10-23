@@ -115,21 +115,10 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 // Serve static files from frontend directory
 app.use(express.static(path.join(__dirname, 'frontend')));
 
-app.post('/generate-pdf', async (req, res) => {
-    // Add CORS headers manually as backup
-    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.header('Access-Control-Allow-Credentials', 'true');
-
-    console.log('PDF generation request received from origin:', req.headers.origin);
-    console.log('Request headers:', req.headers);
-
+// PDF generation function
+async function generatePDF(html, username) {
     let browser;
     try {
-        const { html, username = 'Resume' } = req.body;
-
-        if (!html) {
-            return res.status(400).json({ error: 'HTML content is required' });
-        }
 
         // Launch Puppeteer with high DPI settings
         const isProduction = process.env.NODE_ENV === 'production' || process.env.PORT;
@@ -142,13 +131,18 @@ app.post('/generate-pdf', async (req, res) => {
             '--no-zygote',
             '--disable-gpu',
             '--font-render-hinting=none',
-            '--disable-font-subpixel-positioning'
+            '--disable-font-subpixel-positioning',
+            '--memory-pressure-off',
+            '--max_old_space_size=4096'
         ];
 
         // Add production-specific args
         if (isProduction) {
             puppeteerArgs.push('--disable-web-security');
             puppeteerArgs.push('--disable-features=VizDisplayCompositor');
+            puppeteerArgs.push('--disable-background-timer-throttling');
+            puppeteerArgs.push('--disable-backgrounding-occluded-windows');
+            puppeteerArgs.push('--disable-renderer-backgrounding');
         }
 
         browser = await puppeteer.launch({
@@ -196,6 +190,8 @@ app.post('/generate-pdf', async (req, res) => {
         console.log('HTML content length:', html.length);
         console.log('Processed HTML length:', processedHtml.length);
         console.log('Template HTML length:', templateHtml.length);
+        console.log('CSS content length:', cssContent.length);
+        console.log('Base URL for images:', baseUrl);
 
         // Set content with network idle wait for images
         await page.setContent(templateHtml, {
@@ -223,6 +219,7 @@ app.post('/generate-pdf', async (req, res) => {
         await page.evaluateHandle('document.fonts.ready');
 
         // Generate PDF with exact A4 dimensions - no gaps
+        console.log('Starting PDF generation...');
         const pdfBuffer = await page.pdf({
             format: 'A4',
             printBackground: true,
@@ -238,6 +235,50 @@ app.post('/generate-pdf', async (req, res) => {
             width: '210mm',
             height: '297mm'
         });
+        console.log('PDF generated successfully, buffer size:', pdfBuffer.length);
+
+        // Set response headers
+        const filename = `resume_${username.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Length', pdfBuffer.length);
+
+        // Return PDF buffer
+        return pdfBuffer;
+
+    } catch (error) {
+        console.error('PDF generation error:', error);
+        console.error('Error stack:', error.stack);
+        throw error;
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
+    }
+}
+
+app.post('/generate-pdf', async (req, res) => {
+    // Add CORS headers manually as backup
+    res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
+
+    console.log('PDF generation request received from origin:', req.headers.origin);
+    console.log('Request headers:', req.headers);
+
+    try {
+        const { html, username = 'Resume' } = req.body;
+
+        if (!html) {
+            return res.status(400).json({ error: 'HTML content is required' });
+        }
+
+        // Set a timeout for the entire PDF generation process
+        const pdfGenerationPromise = generatePDF(html, username);
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('PDF generation timeout after 60 seconds')), 60000);
+        });
+
+        const pdfBuffer = await Promise.race([pdfGenerationPromise, timeoutPromise]);
 
         // Set response headers
         const filename = `resume_${username.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
@@ -250,14 +291,12 @@ app.post('/generate-pdf', async (req, res) => {
 
     } catch (error) {
         console.error('PDF generation error:', error);
+        console.error('Error stack:', error.stack);
         res.status(500).json({
             error: 'Failed to generate PDF',
-            details: error.message
+            details: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
-    } finally {
-        if (browser) {
-            await browser.close();
-        }
     }
 });
 
